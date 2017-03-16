@@ -60,3 +60,7 @@ target/
 
 #Ipython Notebook
 .ipynb_checkpoints
+
+# Rackspace Python SDK
+.pyrax
+config.py

@@ -15,6 +15,7 @@
 #   limitations under the License.
 #
 """Rackspace DNS API hook for letsencrypt.sh."""
+import config
 import logging
 import os
 import pyrax
@@ -32,12 +33,16 @@ logger = logging.getLogger(__name__)
 logger.addHandler(logging.StreamHandler())
 logger.setLevel(logging.INFO)
 
+# Determine the current directory
+current_directory = os.path.abspath(os.path.dirname(__file__))
+
 # Ensure that the environment variable PYRAX_CREDS is set and it contains the
 # path to your pyrax credentials file.
 pyrax.set_setting("identity_type", "rackspace")
 try:
-    pyrax.set_credential_file(os.environ['PYRAX_CREDS'])
+    pyrax.set_credential_file("{0}/.pyrax".format(current_directory))
     rax_dns = pyrax.cloud_dns
+    rax_clb = pyrax.cloud_loadbalancers
 except KeyError:
     logger.error(" + Missing pyrax credentials file (export PYRAX_CREDS)")
     sys.exit(1)
@@ -151,6 +156,34 @@ def delete_txt_record(args):
     return True
 
 
+def deploy_cert_to_clb(args):
+    """
+    Deploy generated certificates using Rackspace's CLB API.
+
+    Keyword arguments:
+    args -- passed from letsencrypt.sh
+    """
+    # Args = domain_name, privkey, cert, fullchain, chain_pem, timestamp
+    with open(args[1], 'r') as privkey:
+        privkey_data = privkey.read()
+
+    with open(args[3], 'r') as fullchain:
+        fullchain_data = fullchain.read()
+
+    for lb_id in (config.rackspace["CLB_IDS"]).split():
+        logger.info(' + Deploying certificate to Cloud Load Balancer #{0}'.format(lb_id))
+
+        lb = rax_clb.get(lb_id)
+
+        lb.add_ssl_termination(
+            securePort=config.rackspace["SECURE_PORT"],
+            enabled=True,
+            secureTrafficOnly=config.rackspace["ALLOW_SECURE_TRAFFIC_ONLY"],
+            certificate=fullchain_data,
+            privatekey=privkey_data
+            )
+
+
 def deploy_cert(args):
     """
     Display a message about the location of the cert/key/chain files.
@@ -164,14 +197,18 @@ def deploy_cert(args):
     logger.info(' + Certificate: {0}'.format(args[2]))
     logger.info(' + Certificate w/chain: {0}'.format(args[3]))
     logger.info(' + CA chain: {0}'.format(args[4]))
-    return
+
+    deploy_cert_to_clb(args)
 
 
 def unchanged_cert(args):
     """
     Display a message that the certificate is unchanged.
     """
-    logger.info(' + Certificate is up to date. No changes are needed.')
+    # Args = domain_name, privkey, cert, fullchain, chain_pem, timestamp
+    logger.info(' + Certificate is up to date.')
+
+    deploy_cert_to_clb(args)
 
 
 def main(argv):

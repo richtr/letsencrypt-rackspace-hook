@@ -1,16 +1,19 @@
-Rackspace DNS hook for letsencrypt.sh
-=====================================
+Rackspace DNS hook with Load Balancer SSL Termination Upload
+===============================================================
 
-This repository contains a hook for the `letsencrypt.sh`_ project that allows a
+This repository contains a hook for the `dehydrated`_ project that allows a
 user to obtain a certificate from the `Let's Encrypt`_ API via a DNS challenge.
 The hook will automatically create DNS records via the `Rackspace DNS API`_ and
-remove those records when the challenge process is complete.
+remove those records when the challenge process is complete. As a final step,
+the hook will then upload the generated certificate to all load balancers
+provided.
 
 Have more questions?  Skip down to the FAQ section below.
 
-.. _letsencrypt.sh: https://github.com/lukas2511/letsencrypt.sh
+.. _dehydrated: https://github.com/lukas2511/dehydrated
 .. _Let's Encrypt: https://letsencrypt.org/
 .. _Rackspace DNS API: https://www.rackspace.com/en-us/cloud/dns
+.. _Rackspace Load Balancer API: https://www.rackspace.com/en-us/cloud/load-balancing
 
 Usage
 -----
@@ -24,7 +27,7 @@ Start by cloning all of the files from GitHub:
 
     $ git clone https://github.com/lukas2511/dehydrated
     $ cd dehydrated
-    $ git clone https://github.com/major/letsencrypt-rackspace-hook.git hooks/rackspace
+    $ git clone https://github.com/richtr/letsencrypt-rackspace-hook.git hooks/rackspace
 
 Install the python dependencies:
 
@@ -35,44 +38,51 @@ Install the python dependencies:
 Configuration
 ~~~~~~~~~~~~~
 
-You will need some basic configuration to get started.  First, create a
-``config.sh`` in the base of the letsencrypt.sh repository directory:
+You will need some basic configuration to get started.
 
-.. code-block:: shell
+1\. First, copy the file `config-sample.py` to `config.py` in the root folder
+of *this* project.
 
-    # Use the staging API until we're sure everything is working
-    # (remove this later for production)
-    CA="https://acme-staging.api.letsencrypt.org/directory"
+.. code-block:: console
 
-Now, we export the path to our pyrax credentials file as ``PYRAX_CREDS``:
+    cp ./hooks/rackspace/config-sample.py ./hooks/rackspace/config.py
 
-.. code-block:: shell
+If you want to upload the certificates to a Rackspace Load Balancer as a final
+step then you should add your Rackspace Cloud Load Balancers' IDs to this config
+file. Your Cloud Load Balancer IDs can be found on your load balancer page @
+ https://mycloud.rackspace.com.
 
-    export PYRAX_CREDS="/home/myuser/.pyrax"
+2\. Now, we must also copy the file `.pyrax-sample` to `.pyrax` in the root folder
+of *this* project.
+
+.. code-block:: console
+
+    cp ./hooks/rackspace/.pyrax-sample ./hooks/rackspace/.pyrax
 
 Not familiar with `pyrax`_?  Refer to the `documentation on authentication`_ to
 set up a pyrax configuration file with credentials.
 
-Specify the domain you want to secure with an SSL certificate by creating a ``domains.txt`` in the same directory as ``config.sh``:
+Specify the domain you want to secure with an SSL certificate by creating a ``domains.txt`` in the root dehydrated directory:
 
 .. code-block:: console
 
     # Single domain
-    echo "example.com" > domains.txt
+    echo "example.com" > ./domains.txt
 
     # Separate multiple domains with spaces
-    echo "example.com store.example.com backend.example.com" > domains.txt
+    echo "example.com store.example.com backend.example.com" > ./domains.txt
 
 Getting certificates
 ~~~~~~~~~~~~~~~~~~~~
 
 We have enough configuration to obtain SSL certificates.  Let's run the main
-script, specify our hook, and request a DNS challenge:
+script, specify our hook, and request a DNS challenge and upload the resulting
+certificate to our load balancers, if any are provided in the config:
 
 .. code-block:: console
 
     $ ./dehydrated --challenge dns-01 --cron --hook 'hooks/rackspace/hook.py'
-    # INFO: Using main config file /home/major/git/letsencrypt.sh/config.sh
+    # INFO: Using main config file /home/richtr/git/dehydrated/config.sh
     Processing example.com
      + Signing domains...
      + Generating private key...
@@ -91,10 +101,12 @@ script, specify our hook, and request a DNS challenge:
      + Creating fullchain.pem...
      + Rackspace hook executing: deploy_cert
      + Certificate issued for example.com! Awesome!
-     + Private key: /home/major/git/letsencrypt.sh/certs/example.com/privkey.pem
-     + Certificate: /home/major/git/letsencrypt.sh/certs/example.com/cert.pem
-     + Certificate w/chain: /home/major/git/letsencrypt.sh/certs/example.com/fullchain.pem
-     + CA chain: /home/major/git/letsencrypt.sh/certs/example.com/chain.pem
+     + Private key: /home/richtr/git/dehydrated/certs/example.com/privkey.pem
+     + Certificate: /home/richtr/git/dehydrated/certs/example.com/cert.pem
+     + Certificate w/chain: /home/richtr/git/dehydrated/certs/example.com/fullchain.pem
+     + CA chain: /home/richtr/git/dehydrated/certs/example.com/chain.pem
+     + Deploying certificate to Cloud Load Balancer #154310
+     + Deploying certificate to Cloud Load Balancer #249432
      + Done!
 
 Look in the ``certs`` directory to find your SSL certificates and keys!
@@ -124,7 +136,7 @@ Why not use the normal HTTP challenge for Let's Encrypt?
 
 How do I get the certificates and keys deployed after I receive them?
   There are **plenty** of options.  I prefer to use Ansible to run
-  letsencrypt.sh, pick up the files, and then copy them to remote locations.
+  dehydrated, pick up the files, and then copy them to remote locations.
   I also have the option to restart my web servers via Ansible once the new
   certificates are in place.
 
@@ -133,4 +145,4 @@ Your code sucks. What's your deal? I need this written in COBOL.
 
 ----
 
-Enjoy! *-Major*
+Enjoy! *-Major (w/ richtr)*
